@@ -3,7 +3,7 @@ require 'active_support/core_ext/module/delegation'
 module Paperclip
   class AbstractAdapter
     attr_reader :content_type, :original_filename, :size
-    delegate :close, :closed?, :eof?, :path, :rewind, :unlink, :to => :@tempfile
+    delegate :close, :closed?, :eof?, :path, :rewind, :unlink, :seek, :to => :@tempfile
 
     def fingerprint
       @fingerprint ||= Digest::MD5.file(path).to_s
