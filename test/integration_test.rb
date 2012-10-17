@@ -465,7 +465,9 @@ class IntegrationTest < Test::Unit::TestCase
       setup do
         @dummy.avatar.options[:styles][:mini] = "25x25#"
         @dummy.avatar.instance_variable_set :@normalized_styles, nil
-        @dummy.avatar.reprocess! 'mini'
+        Time.stubs(:now => Time.now + 10)
+        @dummy.avatar.reprocess!
+        @dummy.reload
       end
 
       should "make all the styles accessible" do

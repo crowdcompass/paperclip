@@ -46,7 +46,7 @@ module Paperclip
     # +styles+ - a hash of options for processing the attachment. See +has_attached_file+ for the details
     # +only_process+ - style args to be run through the post-processor. This defaults to the empty list
     # +default_url+ - a URL for the missing image
-    # +default_style+ - the style to use when don't specify an argument to e.g. #url, #path
+    # +default_style+ - the style to use when an argument is not specified e.g. #url, #path
     # +storage+ - the storage mechanism. Defaults to :filesystem
     # +use_timestamp+ - whether to append an anti-caching timestamp to image URLs. Defaults to true
     # +whiny+, +whiny_thumbnails+ - whether to raise when thumbnailing fails
@@ -57,7 +57,7 @@ module Paperclip
     # +convert_options+ - flags passed to the +convert+ command for processing
     # +source_file_options+ - flags passed to the +convert+ command that controls how the file is read
     # +processors+ - classes that transform the attachment. Defaults to [:thumbnail]
-    # +preserve_files+ - whether to keep files on the filesystem when deleting to clearing the attachment. Defaults to false
+    # +preserve_files+ - whether to keep files on the filesystem when deleting or clearing the attachment. Defaults to false
     # +interpolator+ - the object used to interpolate filenames and URLs. Defaults to Paperclip::Interpolations
     # +url_generator+ - the object used to generate URLs, using the interpolator. Defaults to Paperclip::UrlGenerator
     def initialize(name, instance, options = {})
@@ -244,7 +244,7 @@ module Paperclip
     end
 
     # Returns the fingerprint of the file, if one's defined. The fingerprint is
-    # stored in the <attachment>_fingerpring attribute of the model.
+    # stored in the <attachment>_fingerprint attribute of the model.
     def fingerprint
       instance_read(:fingerprint)
     end
@@ -295,6 +295,7 @@ module Paperclip
       begin
         assign(self)
         save
+        instance.save
       rescue Errno::EACCES => e
         warn "#{e} - skipping file."
         false
@@ -321,19 +322,18 @@ module Paperclip
     # "avatar_file_name" field (assuming the attachment is called avatar).
     def instance_write(attr, value)
       setter = :"#{name}_#{attr}="
-      responds = instance.respond_to?(setter)
-      self.instance_variable_set("@_#{setter.to_s.chop}", value)
-      instance.send(setter, value) if responds || attr.to_s == "file_name"
+      if instance.respond_to?(setter)
+        instance.send(setter, value)
+      end
     end
 
     # Reads the attachment-specific attribute on the instance. See instance_write
     # for more details.
     def instance_read(attr)
       getter = :"#{name}_#{attr}"
-      responds = instance.respond_to?(getter)
-      cached = self.instance_variable_get("@_#{getter}")
-      return cached if cached
-      instance.send(getter) if responds || attr.to_s == "file_name"
+      if instance.respond_to?(getter)
+        instance.send(getter)
+      end
     end
 
     private
