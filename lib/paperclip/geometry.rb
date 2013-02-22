@@ -19,9 +19,7 @@ module Paperclip
       file_path = file.respond_to?(:path) ? file.path : file
       raise(Errors::NotIdentifiedByImageMagickError.new("Cannot find the geometry of a file with a blank name")) if file_path.blank?
       geometry = begin
-                   silence_stream(STDERR) do
-                     Paperclip.run("identify", "-format %wx%h :file", :file => "#{file_path}[0]")
-                   end
+                   Paperclip.run("identify", "-format %wx%h :file", :file => "#{file_path}[0]")
                  rescue Cocaine::ExitStatusError
                    ""
                  rescue Cocaine::CommandNotFoundError => e
