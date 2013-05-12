@@ -101,7 +101,7 @@ In your model:
 ```ruby
 class User < ActiveRecord::Base
   attr_accessible :avatar
-  has_attached_file :avatar, :styles => { :medium => "300x300>", :thumb => "100x100>" }
+  has_attached_file :avatar, :styles => { :medium => "300x300>", :thumb => "100x100>" }, :default_url => "/images/:style/missing.png"
 end
 ```
 
@@ -615,7 +615,7 @@ Please see `CONTRIBUTING.md` for more details on contributing and running test.
 Credits
 -------
 
-![thoughtbot](http://thoughtbot.com/images/tm/logo.png)
+![thoughtbot](http://thoughtbot.com/logo.png)
 
 Paperclip is maintained and funded by [thoughtbot, inc](http://thoughtbot.com/community)
 
@@ -626,5 +626,5 @@ The names and logos for thoughtbot are trademarks of thoughtbot, inc.
 License
 -------
 
-Paperclip is Copyright © 2008-2012 thoughtbot. It is free software, and may be
+Paperclip is Copyright © 2008-2013 thoughtbot, inc. It is free software, and may be
 redistributed under the terms specified in the MIT-LICENSE file.

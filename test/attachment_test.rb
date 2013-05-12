@@ -6,6 +6,29 @@ class Dummy; end
 
 class AttachmentTest < Test::Unit::TestCase
 
+  context "presence" do
+    setup do
+      rebuild_class
+      @dummy = Dummy.new
+    end
+
+    context "when file not set" do
+      should "not be present" do
+        assert @dummy.avatar.blank?
+        refute @dummy.avatar.present?
+      end
+    end
+
+    context "when file set" do
+      setup { @dummy.avatar = File.new(fixture_file("50x50.png"), "rb") }
+
+      should "be present" do
+        refute @dummy.avatar.blank?
+        assert @dummy.avatar.present?
+      end
+    end
+  end
+
   should "process :original style first" do
     file = File.new(fixture_file("50x50.png"), 'rb')
     rebuild_class :styles => { :small => '100x>', :original => '42x42#' }
@@ -115,6 +138,39 @@ class AttachmentTest < Test::Unit::TestCase
     assert mock_url_generator_builder.has_generated_url_with_options?(:escape => true, :timestamp => true)
   end
 
+  should "render JSON as default style" do
+    mock_url_generator_builder = MockUrlGeneratorBuilder.new
+    attachment = Paperclip::Attachment.new(:name,
+                                           :instance,
+                                           :default_style => 'default style',
+                                           :url_generator => mock_url_generator_builder)
+
+    attachment_json = attachment.as_json
+    assert mock_url_generator_builder.has_generated_url_with_style_name?('default style')
+  end
+
+  should "pass the option :escape => true if :escape_url is true and :escape is not passed" do
+    mock_url_generator_builder = MockUrlGeneratorBuilder.new
+    attachment = Paperclip::Attachment.new(:name,
+                                           :instance,
+                                           :url_generator => mock_url_generator_builder,
+                                           :escape_url => true)
+
+    attachment.url(:style_name)
+    assert mock_url_generator_builder.has_generated_url_with_options?(:escape => true)
+  end
+
+  should "pass the option :escape => false if :escape_url is false and :escape is not passed" do
+    mock_url_generator_builder = MockUrlGeneratorBuilder.new
+    attachment = Paperclip::Attachment.new(:name,
+                                           :instance,
+                                           :url_generator => mock_url_generator_builder,
+                                           :escape_url => false)
+
+    attachment.url(:style_name)
+    assert mock_url_generator_builder.has_generated_url_with_options?(:escape => false)
+  end
+
   should "return the path based on the url by default" do
     @attachment = attachment :url => "/:class/:id/:basename"
     @model = @attachment.instance
@@ -130,6 +186,24 @@ class AttachmentTest < Test::Unit::TestCase
     model.avatar_file_name = "fake.jpg"
     expected_path = "#{Rails.root}/public/system/fake_models/avatars/000/001/234/original/fake.jpg"
     assert_equal expected_path, avatar_attachment.path
+  end
+
+  should "render JSON as the URL to the attachment" do
+    avatar_attachment = attachment
+    model = avatar_attachment.instance
+    model.id = 1234
+    model.avatar_file_name = "fake.jpg"
+    assert_equal attachment.url, attachment.as_json
+  end
+
+  should "render JSON from the model when requested by :methods" do
+    rebuild_model
+    dummy = Dummy.new
+    dummy.id = 1234
+    dummy.avatar_file_name = "fake.jpg"
+    expected_string = '{"dummy":{"avatar":"/system/dummies/avatars/000/001/234/original/fake.jpg"}}'
+    # active_model pre-3.2 checks only by calling any? on it, thus it doesn't work if it is empty
+    assert_equal expected_string, dummy.to_json(:only => [:dummy_key_for_old_active_model], :methods => [:avatar])
   end
 
   context "Attachment default_options" do
@@ -374,6 +448,25 @@ class AttachmentTest < Test::Unit::TestCase
                       :large => "400x400"
                     },
                     :only_process => [:thumb]
+      @file = StringIO.new("...")
+      @attachment = Dummy.new.avatar
+    end
+
+    should "only process the provided style" do
+      @attachment.expects(:post_process).with(:thumb)
+      @attachment.expects(:post_process).with(:large).never
+      @attachment.assign(@file)
+    end
+  end
+
+  context "An attachment with :only_process that is a proc" do
+    setup do
+      rebuild_model :styles => {
+                      :thumb => "100x100",
+                      :large => "400x400"
+                    },
+                    :only_process => lambda { |attachment| [:thumb] }
+
       @file = StringIO.new("...")
       @attachment = Dummy.new.avatar
     end
@@ -691,9 +784,7 @@ class AttachmentTest < Test::Unit::TestCase
   context "Assigning an attachment" do
     setup do
       rebuild_model :styles => { :something => "100x100#" }
-      @file = StringIO.new(".")
-      @file.stubs(:original_filename).returns("5k.png\n\n")
-      @file.stubs(:content_type).returns("image/png\n\n")
+      @file = File.new(fixture_file("5k.png"), "rb")
       @dummy = Dummy.new
       @dummy.avatar = @file
     end
@@ -710,9 +801,7 @@ class AttachmentTest < Test::Unit::TestCase
   context "Assigning an attachment" do
     setup do
       rebuild_model :styles => { :something => "100x100#" }
-      @file = StringIO.new(".")
-      @file.stubs(:original_filename).returns("5k.png\n\n")
-      @file.stubs(:content_type).returns(MIME::Type.new("image/png"))
+      @file = File.new(fixture_file("5k.png"), "rb")
       @dummy = Dummy.new
       @dummy.avatar = @file
     end
@@ -725,11 +814,8 @@ class AttachmentTest < Test::Unit::TestCase
   context "Attachment with strange letters" do
     setup do
       rebuild_model
-
-      @file  = StringIO.new(".")
-      @file.stubs(:original_filename).returns("sheep_say_bæ.png\r\n")
-      @file.stubs(:content_type).returns("image/png\r\n")
-
+      @file = File.new(fixture_file("5k.png"), "rb")
+      @file.stubs(:original_filename).returns("sheep_say_bæ.png")
       @dummy = Dummy.new
       @dummy.avatar = @file
     end
@@ -1121,6 +1207,13 @@ class AttachmentTest < Test::Unit::TestCase
         assert_equal creation.to_i, @dummy.avatar.created_at
         assert_not_equal now.to_i, @dummy.avatar.created_at
       end
+
+      should "set changed? to true on attachment assignment" do
+        @dummy.avatar = @file
+        @dummy.save!
+        @dummy.avatar = @file
+        assert @dummy.changed?
+      end
     end
 
     context "and avatar_updated_at column" do
@@ -1229,6 +1322,12 @@ class AttachmentTest < Test::Unit::TestCase
     should "not delete the files from storage when attachment is destroyed" do
       @attachment.destroy
       assert_file_exists(@path)
+    end
+
+    should "clear out attachment data when attachment is destroyed" do
+      @attachment.destroy
+      assert !@attachment.exists?
+      assert_nil @dummy.avatar_file_name
     end
 
     should "not delete the file when model is destroyed" do

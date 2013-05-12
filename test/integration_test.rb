@@ -293,6 +293,35 @@ class IntegrationTest < Test::Unit::TestCase
     end
   end
 
+  [0666,0664,0640].each do |perms|
+    context "when the perms are #{perms}" do
+      setup do
+        rebuild_model :override_file_permissions => perms
+        @dummy = Dummy.new
+        @file  = File.new(fixture_file("5k.png"), 'rb')
+      end
+
+      teardown do
+        @file.close
+      end
+
+      should "respect the current perms" do
+        @dummy.avatar = @file
+        @dummy.save
+        assert_equal perms, File.stat(@dummy.avatar.path).mode & 0777
+      end
+    end
+  end
+
+  should "skip chmod operation, when override_file_permissions is set to false (e.g. useful when using CIFS mounts)" do
+    FileUtils.expects(:chmod).never
+
+    rebuild_model :override_file_permissions => false
+    dummy = Dummy.create!
+    dummy.avatar = @file
+    dummy.save
+  end
+
   context "A model with a filesystem attachment" do
     setup do
       rebuild_model :styles => { :large => "300x300>",
@@ -503,7 +532,13 @@ class IntegrationTest < Test::Unit::TestCase
       setup do
         rebuild_model :styles => { :large => "300x300>",
                                    :medium => "100x100",
-                                   :thumb => ["32x32#", :gif] },
+                                   :thumb => ["32x32#", :gif],
+                                   :custom => {
+                                     :geometry => "32x32#",
+                                     :s3_headers => { 'Cache-Control' => 'max-age=31557600' },
+                                     :s3_metadata => { 'foo' => 'bar'}
+                                   }
+                                 },
                       :storage => :s3,
                       :s3_credentials => File.new(fixture_file('s3.yml')),
                       :s3_options => { :logger => Paperclip.logger },
@@ -628,6 +663,16 @@ class IntegrationTest < Test::Unit::TestCase
       should "have the right content type" do
         headers = s3_headers_for(@dummy.avatar, :original)
         assert_equal 'image/png', headers['content-type']
+      end
+
+      should "have the right style-specific headers" do
+        headers = s3_headers_for(@dummy.avatar, :custom)
+        assert_equal 'max-age=31557600', headers['cache-control']
+      end
+
+      should "have the right style-specific metadata" do
+        headers = s3_headers_for(@dummy.avatar, :custom)
+        assert_equal 'bar', headers['x-amz-meta-foo']
       end
 
       context "with non-english character in the file name" do

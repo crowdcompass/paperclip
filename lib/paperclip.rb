@@ -29,10 +29,13 @@ require 'erb'
 require 'digest'
 require 'tempfile'
 require 'paperclip/version'
+require 'paperclip/geometry_parser_factory'
+require 'paperclip/geometry_detector_factory'
 require 'paperclip/geometry'
 require 'paperclip/processor'
 require 'paperclip/tempfile'
 require 'paperclip/thumbnail'
+require 'paperclip/interpolations/plural_cache'
 require 'paperclip/interpolations'
 require 'paperclip/tempfile_factory'
 require 'paperclip/style'
@@ -40,6 +43,7 @@ require 'paperclip/attachment'
 require 'paperclip/attachment_options'
 require 'paperclip/storage'
 require 'paperclip/callbacks'
+require 'paperclip/file_command_content_type_detector'
 require 'paperclip/content_type_detector'
 require 'paperclip/glue'
 require 'paperclip/errors'
@@ -179,7 +183,7 @@ module Paperclip
 
       attachment_definitions[name] = Paperclip::AttachmentOptions.new(options)
       Paperclip.classes_with_attachments << self.name
-      Paperclip.check_for_url_clash(name,attachment_definitions[name][:url],self.name)
+      Paperclip.check_for_path_clash(name,attachment_definitions[name][:path],self.name)
 
       after_save :save_attached_files
       before_destroy :prepare_for_destroy

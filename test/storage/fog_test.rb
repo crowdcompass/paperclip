@@ -1,10 +1,10 @@
 require './test/helper'
 require 'fog'
 
-Fog.mock!
-
 class FogTest < Test::Unit::TestCase
   context "" do
+    setup { Fog.mock! }
+
     context "with credentials provided in a path string" do
       setup do
         rebuild_model :styles => { :medium => "300x300>", :thumb => "100x100>" },
@@ -66,7 +66,7 @@ class FogTest < Test::Unit::TestCase
                      @dummy.avatar.path
       end
     end
-    
+
     context "with no path or url given and using defaults" do
       setup do
         rebuild_model :styles => { :medium => "300x300>", :thumb => "100x100>" },
@@ -82,11 +82,32 @@ class FogTest < Test::Unit::TestCase
         @dummy.id = 1
         @dummy.avatar = @file
       end
-      
+
       teardown { @file.close }
-      
+
       should "have correct path and url from interpolated defaults" do
         assert_equal "dummies/avatars/000/000/001/original/5k.png", @dummy.avatar.path
+      end
+    end
+
+    context "with file params provided as lambda" do
+      setup do
+        fog_file = lambda{ |a| { :custom_header => a.instance.custom_method }}
+        klass = rebuild_model :storage => :fog,
+                              :fog_file => fog_file
+
+        klass.class_eval do
+          def custom_method
+            'foobar'
+          end
+        end
+
+
+        @dummy = Dummy.new
+      end
+
+      should "be able to evaluate correct values for file headers" do
+        assert_equal @dummy.avatar.send(:fog_file), { :custom_header => 'foobar' }
       end
     end
 
@@ -147,6 +168,17 @@ class FogTest < Test::Unit::TestCase
         @dummy.save
         assert paths.none?{ |path| File.exists?(path) },
           "Expect all the files to be deleted."
+      end
+
+      should 'be able to be copied to a local file' do
+        @dummy.save
+        tempfile = Tempfile.new("known_location")
+        tempfile.binmode
+        @dummy.avatar.copy_to_local_file(:original, tempfile.path)
+        tempfile.rewind
+        assert_equal @connection.directories.get(@fog_directory).files.get(@dummy.avatar.path).body,
+                     tempfile.read
+        tempfile.close
       end
 
       should "pass the content type to the Fog::Storage::AWS::Files instance" do
@@ -241,7 +273,7 @@ class FogTest < Test::Unit::TestCase
           @dummy.save
         end
 
-        should 'set the @fog_public for a perticular style to false' do
+        should 'set the @fog_public for a particular style to false' do
           assert_equal false, @dummy.avatar.instance_variable_get('@options')[:fog_public]
           assert_equal false, @dummy.avatar.fog_public(:thumb)
         end
@@ -256,9 +288,22 @@ class FogTest < Test::Unit::TestCase
           @dummy.save
         end
 
-        should 'set the fog_public for a perticular style to correct value' do
+        should 'set the fog_public for a particular style to correct value' do
           assert_equal false, @dummy.avatar.fog_public(:medium)
           assert_equal true, @dummy.avatar.fog_public(:thumb)
+        end
+      end
+
+      context "with fog_public not set" do
+        setup do
+          rebuild_model(@options)
+          @dummy = Dummy.new
+          @dummy.avatar = StringIO.new('.')
+          @dummy.save
+        end
+
+        should "default fog_public to true" do
+          assert_equal true, @dummy.avatar.fog_public
         end
       end
 
@@ -379,5 +424,30 @@ class FogTest < Test::Unit::TestCase
       end
     end
 
+  end
+
+  context "when using local storage" do
+    setup do
+      Fog.unmock!
+      rebuild_model :styles => { :medium => "300x300>", :thumb => "100x100>" },
+                    :storage => :fog,
+                    :url => '/:attachment/:filename',
+                    :fog_directory => "paperclip",
+                    :fog_credentials => { :provider => :local, :local_root => "." },
+                    :fog_host => 'localhost'
+
+      @file = File.new(fixture_file('5k.png'), 'rb')
+      @dummy = Dummy.new
+      @dummy.avatar = @file
+    end
+
+    teardown do
+      @file.close
+      Fog.mock!
+    end
+
+    should "return the public url in place of the expiring url" do
+      assert_match @dummy.avatar.public_url, @dummy.avatar.expiring_url
+    end
   end
 end

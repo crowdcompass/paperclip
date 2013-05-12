@@ -14,6 +14,7 @@ require 'active_support/core_ext'
 require 'mime/types'
 require 'pathname'
 require 'ostruct'
+require 'pry'
 
 puts "Testing against version #{ActiveRecord::VERSION::STRING}"
 
@@ -124,6 +125,10 @@ class FakeModel
 
   def run_paperclip_callbacks name, *args
   end
+
+  def valid?
+    errors.empty?
+  end
 end
 
 def attachment(options={})
@@ -168,7 +173,7 @@ def with_exitstatus_returning(code)
 end
 
 def fixture_file(filename)
- File.join(File.dirname(__FILE__), 'fixtures', filename)
+  File.join(File.dirname(__FILE__), 'fixtures', filename)
 end
 
 def assert_success_response(url)
